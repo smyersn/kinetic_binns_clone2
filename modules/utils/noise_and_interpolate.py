@@ -12,7 +12,7 @@ def noise_and_interpolate(training_data, num_points, epsilon, dimensions, specie
         num_points = len(points)
     
     # define new points for interpolation
-    x_interp = np.linspace(np.min(training_data[:, 0]), np.max(training_data[:, 0]), num_points)
+    x_interp = np.linspace(np.min(points), np.max(points), num_points)
     x_interp_pairs = np.array(list(itertools.product(x_interp, repeat=dimensions)))
 
     # create array to store all interpolated data

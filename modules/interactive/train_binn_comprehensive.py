@@ -4,7 +4,7 @@ repo_start = f'{file_dir}/../../'
 sys.path.append(repo_start)
 
 from modules.utils.imports import *
-from modules.binn.model_wrapper_2d import model_wrapper
+from modules.interactive.model_wrapper_2d import model_wrapper
 from modules.binn.build_binns_2d_diffusion import BINN
 from modules.loaders.format_data import format_data_general
 from modules.loaders.visualize_training_data import animate_data
@@ -54,16 +54,12 @@ device = 'cuda'
 training_data = format_data_general(dimensions, species, file=training_data_path)
 
 # Add noise to training data if specified in config file
-if epsilon != 0 or points != 0:
-    print('made it')
+if epsilon is not None and points is not None:
     training_data = noise_and_interpolate(training_data, points, epsilon, dimensions, species)
-
-print(f'len training data: {len(training_data)}')
 
 animate_data(training_data, dimensions, species, name=f'{dir_name}/training_data')
 
 # Split training data
-
 x_train, y_train, x_val, y_val = training_test_split(training_data, dimensions, species, dir_name, device)
 
 # initialize model and compile
@@ -79,14 +75,10 @@ binn = BINN(
 binn.to(device)
 
 parameters = binn.parameters()
-
-if diffusion == True:
-    print('ayo!')
-    opt = torch. optim.Adam([{'params': binn.surface_fitter.parameters(), 'lr': 0.001}, 
-                            {'params': binn.diffusion_fitter.parameters(), 'lr': difflr},
-                            {'params': binn.reaction.parameters(), 'lr': 0.001}])
-else:
-    opt = torch.optim.Adam(parameters, lr=0.001)
+# opt = torch.optim.Adam(parameters, lr=0.001)
+opt = torch. optim.Adam([{'params': binn.surface_fitter.parameters(), 'lr': 0.001}, 
+                         {'params': binn.diffusion_fitter.parameters(), 'lr': difflr},
+                         {'params': binn.reaction.parameters(), 'lr': 0.001}])
 
 model = model_wrapper(
     model=binn,
@@ -125,7 +117,7 @@ train_loss_dict, val_loss_dict = model.fit(
     callbacks=None,
     verbose=1,
     validation_data=[x_val, y_val],
-    early_stopping=50000,
+    early_stopping=5000,
     rel_save_thresh=rel_save_thresh,
     density_weight=density_weight,
     hist=hist,

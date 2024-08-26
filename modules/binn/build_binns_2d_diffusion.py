@@ -46,7 +46,7 @@ class D_PARAMS(nn.Module):
         self.input_features = input_features
         self.activation = softplus_relu()
         self.min = 0
-        self.max = 10
+        self.max = 5
         self.params = nn.Parameter(torch.rand(self.input_features))
         # self.params = nn.Parameter(torch.tensor([0.01, 1]))
         
@@ -173,10 +173,10 @@ class BINN(nn.Module):
         
         # input extrema
         if data is not None:
-            self.x_min = int(torch.min(data[:, :self.dimensions]).item())
-            self.x_max = int(torch.max(data[:, :self.dimensions]).item())
-            self.t_min = int(torch.min(data[:, self.dimensions]).item())
-            self.t_max = int(torch.max(data[:, self.dimensions]).item())
+            self.x_min = float(torch.min(data[:, :self.dimensions]).item())
+            self.x_max = float(torch.max(data[:, :self.dimensions]).item())
+            self.t_min = float(torch.min(data[:, self.dimensions]).item())
+            self.t_max = float(torch.max(data[:, self.dimensions]).item())
         else:
             self.x_min = 0
             self.x_max = 10
@@ -207,6 +207,7 @@ class BINN(nn.Module):
     def gls_loss(self, pred, true, density_weight, hist, edges):
         residual = (pred - true)**2
         residual *= pred.abs().clamp(min=1.0)**(-self.gamma)
+        print(len(pred), len(true), len(residual))
         
         if hist is not None and edges is not None:
             reciprocal_density = calc_reciprocal_density(true, hist, edges)
@@ -250,7 +251,7 @@ class BINN(nn.Module):
             D = self.diffusion_fitter()
             Du, Dv = D[0], D[1]
         else:
-            Du, Dv = 0.01, 1
+            Du, Dv = torch.tensor(0.01), torch.tensor(1)
         
         print(f'diffusion: {Du, Dv}')  
 
@@ -288,11 +289,9 @@ class BINN(nn.Module):
         
         if self.diff == True:
             self.D_loss += self.D_weight*torch.sum(torch.where(
-                D > self.D_max, (D-self.D_max)**2, torch.zeros_like(D)))
-
-        if self.diff == True:
+                D < self.D_min, (D-self.D_min)**2, torch.zeros_like(D)))
             self.D_loss += self.D_weight*torch.sum(torch.where(
-                D > self.D_min, (D-self.D_min)**2, torch.zeros_like(D)))
+                D > self.D_max, (D-self.D_max)**2, torch.zeros_like(D)))
                         
         # no derivative constraints included (Du and Dv constant, no obvious relationship for F)
         
