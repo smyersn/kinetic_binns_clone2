@@ -55,16 +55,13 @@ training_data = format_data_general(dimensions, species, file=training_data_path
 
 # Add noise to training data if specified in config file
 if epsilon != 0 or points != 0:
-    print('made it')
     training_data = noise_and_interpolate(training_data, points, epsilon, dimensions, species)
-
-print(f'len training data: {len(training_data)}')
 
 animate_data(training_data, dimensions, species, name=f'{dir_name}/training_data')
 
 # Split training data
 
-x_train, y_train, x_val, y_val = training_test_split(training_data, dimensions, species, dir_name, device)
+x_train, y_train, x_val, y_val = training_test_split(training_data, dimensions, device)
 
 # initialize model and compile
 binn = BINN(
@@ -81,7 +78,6 @@ binn.to(device)
 parameters = binn.parameters()
 
 if diffusion == True:
-    print('ayo!')
     opt = torch. optim.Adam([{'params': binn.surface_fitter.parameters(), 'lr': 0.001}, 
                             {'params': binn.diffusion_fitter.parameters(), 'lr': difflr},
                             {'params': binn.reaction.parameters(), 'lr': 0.001}])

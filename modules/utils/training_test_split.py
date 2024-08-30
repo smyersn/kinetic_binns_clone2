@@ -10,7 +10,7 @@ def to_torch(ndarray, device):
     arr = arr.to(device)
     return arr
 
-def training_test_split(training_data, dimensions, species, dir_name, device):
+def training_test_split(training_data, dimensions, device):
     N = len(training_data)
     p = np.random.permutation(N)
     training_data_shuffled = training_data[p[:]]

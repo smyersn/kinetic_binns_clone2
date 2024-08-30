@@ -207,7 +207,6 @@ class BINN(nn.Module):
     def gls_loss(self, pred, true, density_weight, hist, edges):
         residual = (pred - true)**2
         residual *= pred.abs().clamp(min=1.0)**(-self.gamma)
-        print(len(pred), len(true), len(residual))
         
         if hist is not None and edges is not None:
             reciprocal_density = calc_reciprocal_density(true, hist, edges)
