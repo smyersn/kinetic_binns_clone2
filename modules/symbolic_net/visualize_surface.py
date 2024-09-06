@@ -6,21 +6,23 @@ sys.path.append(repo_start)
 from modules.utils.imports import *
 from modules.utils.numpy_torch_conversion import *
 from modules.generate_data.simulate_system import reaction
-from modules.loaders.format_data import format_data
+from modules.loaders.format_data import format_data_general
 
 def visualize_surface(model, model_dir, training_data_path):
     
-    # Load training data
-    xt, u, v, shape_u, shape_v = format_data(training_data_path, plot=False)
-    u_triangle_mesh, v_triangle_mesh = lltriangle(u, v)
+    # Generate training data
+    training_data = format_data_general(2, 2, training_data_path)
+    all_u, all_v = training_data[:, -2], training_data[:, -1], 
+    u_triangle_mesh, v_triangle_mesh = lltriangle(all_u, all_v)
+    u, v = np.ravel(u_triangle_mesh), np.ravel(v_triangle_mesh)
 
     # Calculate true reaction surface
     a, b, k = 1, 1, 0.01
-    F_true = reaction(u_triangle_mesh, v_triangle_mesh, a, b, k)
+    F_true_stacked = reaction(u, v, a, b, k)
+    F_true = np.reshape(F_true_stacked, (101, 101))
 
     # Calculate MLP reaction surface
-    uv = np.column_stack((np.ravel(u_triangle_mesh), np.ravel(v_triangle_mesh)))
-    F_mlp_stacked = to_numpy(model.model.individual.predict_f(to_torch(uv)))
+    F_mlp_stacked = to_numpy(model.model.individual.predict_f(to_torch(np.column_stack((u, v)))))
     F_mlp = np.reshape(F_mlp_stacked, (101, 101))
 
     # Plot

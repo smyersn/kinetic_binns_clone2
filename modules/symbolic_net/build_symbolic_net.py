@@ -30,8 +30,7 @@ class symbolic_net(nn.Module):
         F (torch tensor): predicted reaction values with shape (N, 1)
     '''
     
-    def __init__(self, species, degree, coef_bounds, device, l1reg=0, nonzero_terms=0):
-        
+    def __init__(self, species, degree, coef_bounds, device, l1_reg=0, nonzero_term_reg=0):
         super().__init__()
         self.F_min = -100
         self.F_max = 100
@@ -43,8 +42,8 @@ class symbolic_net(nn.Module):
         
         self.species = species
         self.degree = degree
-        self.l1reg = l1reg
-        self.nonzero_terms = nonzero_terms
+        self.l1_reg = l1_reg
+        self.nonzero_term_reg = nonzero_term_reg
         
         self.poly_terms = calculate_poly_terms(species, degree)
         self.hill_terms = calculate_hill_terms(species, degree)
@@ -53,9 +52,10 @@ class symbolic_net(nn.Module):
         self.params = nn.Parameter(torch.rand(self.num_params).to(device))
         self.individual = individual(self.params, self.poly_terms, 
                                      self.hill_terms, self.num_params)
-    
+
     def forward(self, input):
         output = self.individual.predict_f(input)
+        # print(f'params: {self.individual.params}')
         return output
     
     def loss(self, pred, true):
@@ -81,16 +81,24 @@ class symbolic_net(nn.Module):
         self.param_loss += self.param_weight*torch.where(
             self.params > self.param_max, (self.params-self.param_min)**2, torch.zeros_like(self.params))
         
+        coefficients = torch.cat((self.individual.poly_params, self.individual.hill_params), dim=0)
+        print(f'coefficients: {coefficients}')
         # L1 Regularization
-        if self.l1reg != 0:
-            l1_norm = torch.norm(self.individual.poly_params, p=1) + torch.norm(self.individual.hill_params, p=1)
-            self.l1reg_loss += self.l1reg * l1_norm
+        if self.l1_reg != 0:
+            # l1_norm = torch.norm(self.individual.poly_params, p=1) + torch.norm(self.individual.hill_params, p=1)
+            l1_norm = torch.norm(coefficients, p=1)
+
+            self.l1reg_loss += self.l1_reg * l1_norm
+            print(f'l1_norm: {l1_norm}')
         
         # Nonzero term loss
-        if self.nonzero_terms != 0:
-            count = torch.count_nonzero(self.individual.poly_params) + torch.count_nonzero(self.individual.hill_params)
-            self.nonzero_terms_loss += torch.abs(self.nonzero_terms - count) * self.nonzero_terms        
-
+        if self.nonzero_term_reg != 0:
+            count = torch.count_nonzero(coefficients)
+            self.nonzero_terms_loss += self.nonzero_term_reg * torch.abs(2 - count)
+            print(f'count: {count}')  
+            
         total_loss = (self.MSE_loss + torch.mean(self.F_loss) + torch.mean(self.param_loss) + self.l1reg_loss + self.nonzero_terms_loss)
+        print(self.MSE_loss, self.l1reg_loss, self.nonzero_terms_loss, total_loss)
+
         return total_loss
     

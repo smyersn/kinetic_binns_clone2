@@ -157,7 +157,8 @@ def simulate_surface_general(model, device, dimensions, species, diffusion, mode
     x_array, u_array, v_array, t_array = simulate(u0, v0, L, points, T, 
                                                   dimensions, species,
                                                   nn=model.model, 
-                                                  diffusion=diffusion)
+                                                  diffusion=diffusion,
+                                                  early_stop=False)
     
     sim_formatted = format_data_general(dimensions, species, x_array=x_array, 
                         t_array=t_array, u_array=u_array, v_array=v_array)
@@ -175,7 +176,8 @@ def simulate_surface_general(model, device, dimensions, species, diffusion, mode
     x_array, u_array, v_array, t_array = simulate(u0, v0, L, points, T,
                                                   dimensions, species,
                                                   nn=model.model,
-                                                  diffusion=diffusion)
+                                                  diffusion=diffusion,
+                                                  early_stop=False)
     
     sim_formatted = format_data_general(dimensions, species, x_array=x_array, 
                     t_array=t_array, u_array=u_array, v_array=v_array)

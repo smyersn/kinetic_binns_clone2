@@ -220,6 +220,9 @@ class model_wrapper():
 
                     # run the model
                     y_pred = self.model(x_true)
+                    # print(f'xtrue: {x_true}')
+                    # print(f'y_pred: {y_pred}')
+                    # print(self.model.individual.params)
 
                     # compute loss and optional regularization
                     self.train_loss += self.loss(y_pred, y_true)

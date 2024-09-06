@@ -8,7 +8,7 @@ from modules.symbolic_net.model_wrapper import model_wrapper
 from modules.symbolic_net.build_symbolic_net import symbolic_net
 from modules.utils.training_test_split import training_test_split
 from modules.analysis.generate_loss_curves import generate_loss_curves
-from modules.loaders.format_data import format_data
+from modules.loaders.format_data import format_data_general
 from modules.generate_data.simulate_system import reaction
 from modules.symbolic_net.write_terms import write_terms
 from modules.symbolic_net.visualize_surface import visualize_surface
@@ -19,8 +19,8 @@ exec(Path(f'{sys.argv[1]}/config.cfg').read_text(encoding="utf8"), {}, config)
 training_data_path = config['training_data_path']
 species = int(config['species'])
 degree = int(config['degree'])
-nonzero_terms = int(config['nonzero_terms'])
-l1reg = float(config['l1reg'])
+nonzero_term_reg = int(config['nonzero_term_reg'])
+l1_reg = float(config['l1_reg'])
 coef_bounds = float(config['coef_bounds'])
 density_weight = float(config['density_weight'])
 
@@ -32,8 +32,9 @@ rel_save_thresh = 0.05
 device = 'cuda'
 
 # Generate training data
-xt, u, v, shape_u, shape_v = format_data(training_data_path, plot=False)
-u_triangle_mesh, v_triangle_mesh = lltriangle(u, v)
+training_data = format_data_general(2, 2, file=training_data_path)
+uv = training_data[:, -2:]
+u_triangle_mesh, v_triangle_mesh = lltriangle(uv[:, 0], uv[:, 1])
 u, v = np.ravel(u_triangle_mesh), np.ravel(v_triangle_mesh)
 
 a, b ,k = 1, 1, 0.01
@@ -49,8 +50,8 @@ training_data = training_data_nans[mask]
 x_train, y_train, x_val, y_val = training_test_split(training_data, 1, device)
 
 # initialize model and compile
-sym_net = symbolic_net(species, degree, coef_bounds, device, l1reg,
-                       nonzero_terms)
+sym_net = symbolic_net(species, degree, coef_bounds, device, l1_reg,
+                       nonzero_term_reg)
 sym_net.to(device)
 
 # initialize optimizer

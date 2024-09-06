@@ -102,7 +102,7 @@ def generate_initial_conditions(u0, v0, N, dim, spikes=0, custom=False,
     return u, v
     
 def simulate(u, v, L, N, T, dim, species, a=1, b=1, k=0.01, Du=0.01, Dv=1, 
-             nn=None, diffusion=False, npz_path=None):
+             nn=None, diffusion=False, npz_path=None, early_stop=True):
     
     if diffusion == True:
         D = nn.diffusion_fitter()
@@ -137,10 +137,11 @@ def simulate(u, v, L, N, T, dim, species, a=1, b=1, k=0.01, Du=0.01, Dv=1,
             u_array[int(t/half_sec_nits), Ellipsis] = u
             v_array[int(t/half_sec_nits), Ellipsis] = v
             t_array[int(t / half_sec_nits)] = t * dt
-                    
-            if t > 0 and np.max(np.abs(u_array[int(t/half_sec_nits), :, :] - u_array[int(t/half_sec_nits)-1, :, :])) < ss_tolerance:
-                print(f'Steady state at t = {t * dt}')
-                break
+            
+            if early_stop == True:        
+                if t > 0 and np.max(np.abs(u_array[int(t/half_sec_nits), :, :] - u_array[int(t/half_sec_nits)-1, :, :])) < ss_tolerance:
+                    print(f'Steady state at t = {t * dt}')
+                    break
         
         if dim == 1:    
             u, v = update_1d(u, v, a, b, k, Du, Dv, dt, dx, nn, diffusion)

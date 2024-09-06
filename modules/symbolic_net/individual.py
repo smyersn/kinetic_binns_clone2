@@ -56,6 +56,9 @@ class individual():
             else:
                 dec_hill_pred[:, i] = param * ((uv[:, term[0]] * (1 - (uv[:, term[1]]**n) / (1 + k * uv[:, term[1]]**n))))
 
+        # print(f'poly: {poly_pred}')
+        # print(f'inc_hill: {inc_hill_pred}')
+        # print(f'dec_hill: {dec_hill_pred}')
         return torch.sum(poly_pred, dim=1) + torch.sum(inc_hill_pred, dim=1) + torch.sum(dec_hill_pred, dim=1)
     
     def generate_surface(self):
