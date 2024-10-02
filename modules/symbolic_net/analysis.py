@@ -19,9 +19,11 @@ exec(Path(f'{sys.argv[1]}/config.cfg').read_text(encoding="utf8"), {}, config)
 training_data_path = config['training_data_path']
 species = int(config['species'])
 degree = int(config['degree'])
-nonzero_terms = int(config['nonzero_terms'])
+nonzero_term_reg = int(config['nonzero_term_reg'])
+l1_reg = float(config['l1_reg'])
 coef_bounds = float(config['coef_bounds'])
 density_weight = float(config['density_weight'])
+learning_rate = float(config['learning_rate'])
 
 dir_name = sys.argv[1]
 
@@ -48,12 +50,13 @@ training_data = training_data_nans[mask]
 x_train, y_train, x_val, y_val = training_test_split(training_data, 1, device)
 
 # initialize model and compile
-sym_net = symbolic_net(species, degree, coef_bounds, device)
+sym_net = symbolic_net(species, degree, coef_bounds, device, l1_reg,
+                       nonzero_term_reg)
 sym_net.to(device)
 
 # initialize optimizer
 parameters = sym_net.parameters()
-opt = torch.optim.Adam(parameters, lr=0.001)
+opt = torch.optim.Adam(parameters, lr=learning_rate)
 
 model = model_wrapper(
     model=sym_net,

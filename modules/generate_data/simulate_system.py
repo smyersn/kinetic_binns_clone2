@@ -6,10 +6,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from modules.utils.numpy_torch_conversion import *
+from scipy.signal import convolve2d
 
 # Define 2-dimensional Laplacian
-def laplace_2d(M, dx):
+def laplace_1d(M, dx):
     grid = (-2 * M + np.roll(M, 1) + np.roll(M, -1)) / dx**2
+    return grid
+
+def laplace_2d(M, dx):
+    grid = (-4 * M + np.roll(M, 1, axis=0) + np.roll(M, -1, axis=0) +
+    np.roll(M, 1, axis=1) + np.roll(M, -1, axis=1)) / dx**2
+    
+    # kernel = np.array([[0, 1, 0],
+    #                   [1, -4, 1],
+    #                   [0, 1, 0]])
+
+    # grid = convolve2d(M, kernel, mode='same', boundary='wrap')
     return grid
 
 def calc_squared_wavenumbers(L, N, Du, Dv):
@@ -29,6 +41,7 @@ def calc_squared_wavenumbers(L, N, Du, Dv):
 # Define reaction
 def reaction(u, v, a, b, k):
     F = (a * u**2 * v) / (1 + k * u**2) - b * u
+    
     return F
 
 # Define update functions for simulation
@@ -40,9 +53,9 @@ def update_1d(u0, v0, a, b, k, Du, Dv, dt, dx, points, nn=None,
         F = to_numpy(nn.reaction(to_torch(
             np.column_stack((u0, v0)))[:, None]))
         F = np.reshape(F, (points,))
-                
-    Lu = laplace_2d(u0, dx)
-    Lv = laplace_2d(v0, dx)
+
+    Lu = laplace_1d(u0, dx)
+    Lv = laplace_1d(v0, dx)
     
     u1 = u0 + (Du * Lu + F) * dt
     v1 = v0 + (Dv * Lv - F) * dt
@@ -66,8 +79,26 @@ def update_2d(u0, v0, a, b, k, Du, Dv, dt, ksqu, ksqv, points, nn=None,
     
     u1 = np.real(np.fft.ifft2(u1r_hat / (1 - dt * ksqu)))
     v1 = np.real(np.fft.ifft2(v1r_hat / (1 - dt * ksqv)))
-
+    
     return u1, v1  
+
+def update_2d_laplace(u0, v0, a, b, k, Du, Dv, dt, dx, points, nn=None,
+              diffusion=None):
+    if nn == None:
+        F = reaction(u0, v0, a, b, k)
+    else:
+        F = to_numpy(nn.reaction(to_torch(
+            np.column_stack((u0.ravel(), v0.ravel())))[:, None]))
+        F = np.reshape(F, (points,)*2)
+                
+    Lu = laplace_2d(u0, dx)
+    Lv = laplace_2d(v0, dx)
+    
+    u1 = u0 + (Du * Lu + F) * dt
+    v1 = v0 + (Dv * Lv - F) * dt
+    
+    return u1, v1
+
 
 def generate_initial_conditions(u0, v0, N, dim, spikes=0, custom=False, 
                                 random=False):
@@ -115,9 +146,10 @@ def simulate(u, v, L, N, T, dim, species, a=1, b=1, k=0.01, Du=0.01, Dv=1,
         ss_tolerance = 0.005
         dx = L / N
     else:
-        dt = 0.001
-        ss_tolerance = 0.1
+        dt = 0.0001
+        ss_tolerance = 0.05
         ksqu, ksqv = calc_squared_wavenumbers(L, N, Du, Dv)
+        dx = L / N
                 
     nits = int(T / dt)
     half_sec_nits = 0.5 / dt
@@ -133,22 +165,24 @@ def simulate(u, v, L, N, T, dim, species, a=1, b=1, k=0.01, Du=0.01, Dv=1,
     
     # Solve
     for t in range(nits):
+        if t % (nits // 10) == 0:
+            print(f"Progress: {int((t / nits) * 100)}%", flush=True)
         if t % half_sec_nits == 0:
             u_array[int(t/half_sec_nits), Ellipsis] = u
             v_array[int(t/half_sec_nits), Ellipsis] = v
             t_array[int(t / half_sec_nits)] = t * dt
             
             if early_stop == True:        
-                if t > 0 and np.max(np.abs(u_array[int(t/half_sec_nits), :, :] - u_array[int(t/half_sec_nits)-1, :, :])) < ss_tolerance:
-                    print(f'Steady state at t = {t * dt}')
+                if t > 0 and np.max(np.abs(u_array[int(t/half_sec_nits)] - u_array[int(t/half_sec_nits)-1])) < ss_tolerance:
+                    print(f'Steady state at t = {t * dt}', flush=True)
                     break
         
         if dim == 1:    
-            u, v = update_1d(u, v, a, b, k, Du, Dv, dt, dx, nn, diffusion)
+            u, v = update_1d(u, v, a, b, k, Du, Dv, dt, dx, N, nn, diffusion)
         else:
-            u, v = update_2d(u, v, a, b, k, Du, Dv, dt, ksqu, ksqv, N, nn,
-                             diffusion)
-
+            # u, v = update_2d(u, v, a, b, k, Du, Dv, dt, ksqu, ksqv, N, nn, 
+            # diffusion)
+            u, v = update_2d_laplace(u, v, a, b, k, Du, Dv, dt, dx, N, nn, diffusion)
     # Remove zeros from arrays due to reaching steady state
     u_array = u_array[~np.all(u_array == 0, axis=1)]
     v_array = v_array[~np.all(v_array == 0, axis=1)]

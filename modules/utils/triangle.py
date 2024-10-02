@@ -3,11 +3,11 @@ import numpy as np
 # create triangular mesh grid from training data
 def lltriangle(u, v):
     # generate points bewteen min and max values to create mesh
-    #u = np.reshape(u, (50, 500), order='F')
-    #v = np.reshape(v, (50, 500), order='F')
+    # u_points = np.linspace(np.min(u), np.max(u), 101)
+    # v_points = np.linspace(np.min(v), np.max(v), 101)
+    u_points = np.linspace(np.min(u), np.max(u), 501)
+    v_points = np.linspace(np.min(v), np.max(v), 501)
 
-    u_points = np.linspace(np.min(u), np.max(u), 101)
-    v_points = np.linspace(np.min(v), np.max(v), 101)
     u_mesh, v_mesh = np.meshgrid(u_points, v_points)
 
     # get lower left corner

@@ -8,11 +8,10 @@ from modules.genetic_algorithm.custom_deap_functions import (
     calculate_poly_terms, calculate_hill_terms)
 
 class individual():   
-    def __init__(self, params, poly_terms, hill_terms, num_params):
+    def __init__(self, params, poly_terms, hill_terms):
         self.params = params
         self.poly_terms = poly_terms
         self.hill_terms = hill_terms
-        self.num_params = num_params
 
         # Define parameter indices
         hill_params_start = len(self.poly_terms)
@@ -55,11 +54,41 @@ class individual():
                 dec_hill_pred[:, i] = param * (1 - (uv[:, term[0]]**n / (1 + k * uv[:, term[0]]**n)))
             else:
                 dec_hill_pred[:, i] = param * ((uv[:, term[0]] * (1 - (uv[:, term[1]]**n) / (1 + k * uv[:, term[1]]**n))))
-
-        # print(f'poly: {poly_pred}')
-        # print(f'inc_hill: {inc_hill_pred}')
-        # print(f'dec_hill: {dec_hill_pred}')
+       
         return torch.sum(poly_pred, dim=1) + torch.sum(inc_hill_pred, dim=1) + torch.sum(dec_hill_pred, dim=1)
     
-    def generate_surface(self):
-        return 1
+    def calculate_terms(self, uv):       
+        # Create vector to store surface prediction for learned function
+        total_surface = np.zeros(len(uv))
+
+        # Contribution to surface from polynomial terms
+        for term, param in zip(self.poly_terms, self.poly_params):
+            term_surface = np.repeat(param, len(uv))
+            for idx in term:
+                term_surface *= uv[:, idx]
+            total_surface += term_surface
+        
+        # Contriubtion to surface from increasing Hill function terms
+        for term, param, k, n in zip(self.hill_terms, self.hill_params_increasing, self.hill_ks_increasing, self.hill_ns_increasing):
+            term_surface = np.repeat(param, len(uv)) 
+            if len(term) == 1:
+                term_surface *= (uv[:, term[0]]**n / (1 + k * uv[:, term[0]]**n))
+            else:
+                term_surface *= ((uv[:, term[0]] * uv[:, term[1]]**n) / (1 + k * uv[:, term[1]]**n))
+            total_surface += term_surface
+    
+        # Contriubtion to surface from decreasing Hill function terms
+        for term, param, k, n in zip(self.hill_terms, self.hill_params_decreasing, self.hill_ks_decreasing, self.hill_ns_decreasing): 
+            term_surface = np.repeat(param, len(uv))
+            if len(term) == 1:
+                term_surface *= 1 - (uv[:, term[0]]**n / (1 + k * uv[:, term[0]]**n))
+            else:
+                term_surface *= (uv[:, term[0]] * (1 - (uv[:, term[1]]**n) / (1 + k * uv[:, term[1]]**n)))
+            total_surface += term_surface
+        
+        # Reshape to match mesh dimensions    
+        total_surface = np.reshape(total_surface, (101, 101))
+
+        return total_surface
+
+    def calculate_surface(self) = 

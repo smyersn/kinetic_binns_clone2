@@ -2,6 +2,7 @@ import torch, time, sys, pdb
 import numpy as np
 
 from modules.utils.time_remaining import *
+from modules.symbolic_net.write_terms import write_terms
 
 class model_wrapper():
    
@@ -220,10 +221,7 @@ class model_wrapper():
 
                     # run the model
                     y_pred = self.model(x_true)
-                    # print(f'xtrue: {x_true}')
-                    # print(f'y_pred: {y_pred}')
-                    # print(self.model.individual.params)
-
+                                        
                     # compute loss and optional regularization
                     self.train_loss += self.loss(y_pred, y_true)
 

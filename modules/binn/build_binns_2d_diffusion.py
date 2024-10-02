@@ -241,7 +241,7 @@ class BINN(nn.Module):
                 d2 = gradient(d1[:, j], inputs, order=1)
                 uxx = d2[:, j]
                 uxx_array[i, :, j] = uxx
-                                
+                                        
         # reaction
         F = self.reaction(outputs)
         
@@ -252,7 +252,7 @@ class BINN(nn.Module):
         else:
             Du, Dv = torch.tensor(0.01), torch.tensor(1)
         
-        print(f'diffusion: {Du, Dv}')  
+        # print(f'diffusion: {Du, Dv}')  
 
         # Reaction-diffusion equation       
         LHS_u = ut_array[:, 0][:,None]
@@ -260,18 +260,30 @@ class BINN(nn.Module):
         LHS_v = ut_array[:, 1][:,None]
         RHS_v = Dv * torch.sum(uxx_array[1, :, :], dim=1, keepdim=True) - F
         pde_loss = (LHS_u - RHS_u)**2 + (LHS_v - RHS_v)**2
-        # reg = self.alpha * (((1 / torch.abs(RHS_u)) + (1 / torch.abs(RHS_v))) / 2)
         reg = self.alpha * (((1 / torch.abs(Du)) + (1 / torch.abs(Dv))) / 2)
 
         reg_pde_loss = pde_loss + reg
         
-        print(f'u LHS: {LHS_u[:5, :]}')
-        print(f'u RHS: {RHS_u[:5, :]}')
-        print(f'v LHS: {LHS_v[:5, :]}')
-        print(f'v RHS: {RHS_v[:5, :]}')
-        print(f'loss unreg: {pde_loss[:5, :]}')
-        print(f'loss reg: {reg_pde_loss[:5, :]}')
+        # print(f'u LHS: {LHS_u[:5, :]}')
+        # print(f'u RHS: {RHS_u[:5, :]}')
+        # print(f'v LHS: {LHS_v[:5, :]}')
+        # print(f'v RHS: {RHS_v[:5, :]}')
+        # print(f'loss unreg: {pde_loss[:5, :]}')
+        # print(f'loss reg: {reg_pde_loss[:5, :]}')
         
+        # Calculate Euler loss (prevents negative concentrations) 
+        timestep = 0.0001
+        
+        u_updated = u[:, 0] + RHS_u.squeeze() * timestep
+        v_updated = u[:, 1] + RHS_v.squeeze() * timestep
+        
+        self.Euler_loss = 0
+        
+        self.Euler_loss += torch.where(u_updated < 0, 10000 * (u_updated)**2, 
+                                       torch.zeros_like(u_updated)) + torch.where(
+                                           v_updated < 0, 10000 * (v_updated)**2, 
+                                           torch.zeros_like(v_updated))
+                        
         if hist is not None and edges is not None:
             # add weight based on density
             reciprocal_density = calc_reciprocal_density(outputs, hist, edges).to(self.inputs.device)
@@ -294,7 +306,7 @@ class BINN(nn.Module):
                         
         # no derivative constraints included (Du and Dv constant, no obvious relationship for F)
         
-        return torch.mean(reg_pde_loss + self.F_loss + self.D_loss)
+        return torch.mean(reg_pde_loss + self.Euler_loss + self.F_loss + self.D_loss)
     
     def loss(self, pred, true, density_weight=0, hist=None, edges=None):
         self.gls_loss_val = 0

@@ -21,8 +21,9 @@ species = int(config['species'])
 degree = int(config['degree'])
 nonzero_term_reg = int(config['nonzero_term_reg'])
 l1_reg = float(config['l1_reg'])
-coef_bounds = float(config['coef_bounds'])
+param_bounds = float(config['param_bounds'])
 density_weight = float(config['density_weight'])
+learning_rate = float(config['learning_rate'])
 
 dir_name = sys.argv[1]
 
@@ -50,13 +51,13 @@ training_data = training_data_nans[mask]
 x_train, y_train, x_val, y_val = training_test_split(training_data, 1, device)
 
 # initialize model and compile
-sym_net = symbolic_net(species, degree, coef_bounds, device, l1_reg,
+sym_net = symbolic_net(species, degree, param_bounds, device, l1_reg,
                        nonzero_term_reg)
 sym_net.to(device)
 
 # initialize optimizer
 parameters = sym_net.parameters()
-opt = torch.optim.Adam(parameters, lr=0.001)
+opt = torch.optim.Adam(parameters, lr=learning_rate)
 
 model = model_wrapper(
     model=sym_net,
@@ -95,7 +96,7 @@ train_loss_dict, val_loss_dict = model.fit(
     callbacks=None,
     verbose=1,
     validation_data=[x_val, y_val],
-    early_stopping=10000,
+    early_stopping=50000,
     rel_save_thresh=rel_save_thresh,
     density_weight=density_weight,
     hist=hist,

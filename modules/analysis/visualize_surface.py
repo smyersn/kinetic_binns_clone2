@@ -24,12 +24,12 @@ def visualize_surface(model, device, dimensions, species, model_dir, training_da
     # Calculate MLP reaction surface
     uv = np.column_stack((np.ravel(u_triangle_mesh), np.ravel(v_triangle_mesh)))
     F_mlp_stacked = to_numpy(model.model.reaction(to_torch(uv)[:, None]))
-    F_mlp = np.reshape(F_mlp_stacked, (101, 101))
+    F_mlp = np.reshape(F_mlp_stacked, (501, 501))
 
     # Plot
     fig = make_subplots(rows=1, cols=2,
                         specs=[[{'type':'scene'}, {'type':'scene'}]],
-                        subplot_titles=('F(A, B)', 'F*(A, B)'),
+                        subplot_titles=('F(u, v)', 'F*(u, v)'),
                         horizontal_spacing = 0)
 
     fig.layout.annotations[0].update(y=0.8)
@@ -61,8 +61,8 @@ def visualize_surface(model, device, dimensions, species, model_dir, training_da
                 size=20),
         
         scene=dict( 
-        xaxis_title='[A] (uM)',
-        yaxis_title='[B] (uM)',
+        xaxis_title='[u] (uM)',
+        yaxis_title='[v] (uM)',
         zaxis_title='F',
         xaxis = dict(
             tick0 = 0,
@@ -81,8 +81,8 @@ def visualize_surface(model, device, dimensions, species, model_dir, training_da
         camera=dict(eye=dict(x=1, y=-2.5, z=1)),),
                     
         scene2=dict(
-        xaxis_title='[A] (uM)',
-        yaxis_title='[B] (uM)',
+        xaxis_title='[u] (uM)',
+        yaxis_title='[v] (uM)',
         zaxis_title='F*',
         xaxis = dict(
             tick0 = 0,

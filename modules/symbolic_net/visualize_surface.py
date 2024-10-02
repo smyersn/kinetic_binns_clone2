@@ -19,16 +19,16 @@ def visualize_surface(model, model_dir, training_data_path):
     # Calculate true reaction surface
     a, b, k = 1, 1, 0.01
     F_true_stacked = reaction(u, v, a, b, k)
-    F_true = np.reshape(F_true_stacked, (101, 101))
+    F_true = np.reshape(F_true_stacked, (501, 501))
 
     # Calculate MLP reaction surface
     F_mlp_stacked = to_numpy(model.model.individual.predict_f(to_torch(np.column_stack((u, v)))))
-    F_mlp = np.reshape(F_mlp_stacked, (101, 101))
+    F_mlp = np.reshape(F_mlp_stacked, (501, 501))
 
     # Plot
     fig = make_subplots(rows=1, cols=2,
                         specs=[[{'type':'scene'}, {'type':'scene'}]],
-                        subplot_titles=('F(A, B)', 'F*(A, B)'),
+                        subplot_titles=('F(u, v)', 'F*(u, v)'),
                         horizontal_spacing = 0)
 
     fig.layout.annotations[0].update(y=0.8)
@@ -60,8 +60,8 @@ def visualize_surface(model, model_dir, training_data_path):
                 size=20),
         
         scene=dict( 
-        xaxis_title='[A] (uM)',
-        yaxis_title='[B] (uM)',
+        xaxis_title='[u] (uM)',
+        yaxis_title='[v] (uM)',
         zaxis_title='F',
         xaxis = dict(
             tick0 = 0,
