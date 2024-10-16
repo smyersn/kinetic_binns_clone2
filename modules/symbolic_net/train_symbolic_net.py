@@ -12,6 +12,7 @@ from modules.loaders.format_data import format_data_general
 from modules.generate_data.simulate_system import reaction
 from modules.symbolic_net.write_terms import write_terms
 from modules.symbolic_net.visualize_surface import visualize_surface
+from modules.symbolic_net.individual import individual
 
 config = {}
 exec(Path(f'{sys.argv[1]}/config.cfg').read_text(encoding="utf8"), {}, config)
@@ -26,6 +27,8 @@ density_weight = float(config['density_weight'])
 learning_rate = float(config['learning_rate'])
 
 dir_name = sys.argv[1]
+
+### TRAINING
 
 # Set training hyperparameters
 epochs = int(1e6)
@@ -96,7 +99,7 @@ train_loss_dict, val_loss_dict = model.fit(
     callbacks=None,
     verbose=1,
     validation_data=[x_val, y_val],
-    early_stopping=50000,
+    early_stopping=10000,
     rel_save_thresh=rel_save_thresh,
     density_weight=density_weight,
     hist=hist,
@@ -104,18 +107,44 @@ train_loss_dict, val_loss_dict = model.fit(
 
 generate_loss_curves(train_loss_dict, val_loss_dict, dir_name)
 
+### ANALYSIS
+
 # Load model for analaysis
 model.load(f"{dir_name}/binn_best_val_model", device=device)
 
-# Write terms
+# Generate surface for unrefined equation
+F_mlp_unformatted = model.model.individual.predict_f(torch.tensor(training_data_nans).to(device))
+F_mlp = F_mlp_unformatted.cpu().detach().numpy().reshape(501, 501)
+visualize_surface(dir_name, u_triangle_mesh, v_triangle_mesh,
+                  F_true.reshape(501, 501), F_mlp, 'f_mlp_surface_unrefined')
+
+# Refine and print equation
+ind = individual(model.model.params, species, degree)
+    
 fn = f'{dir_name}/equation.txt'
 file = open(fn, 'w')
-terms = write_terms(model.model.individual)
 
+file.write(f'Original Equation:\n')
+terms = write_terms(ind)
+for term in terms:
+    file.write(f'{term}\n')
+
+file.write(f'\nNo insignificant terms:\n')
+ind.fix_insignificant_terms(torch.tensor(training_data).to(device))
+terms = ind.write_terms()
+for term in terms:
+    file.write(f'{term}\n')
+
+file.write(f'\nNo cheating Hill functions:\n')
+ind.fix_cheating_hill_functions(torch.tensor(training_data).to(device))
+terms = ind.write_terms()
 for term in terms:
     file.write(f'{term}\n')
 
 file.close()
 
-# Generate surface
-visualize_surface(model, dir_name, training_data_path)
+# Generate surface for refined equation
+F_mlp_unformatted = ind.predict_f(torch.tensor(training_data_nans).to(device))
+F_mlp = F_mlp_unformatted.cpu().detach().numpy().reshape(501, 501)
+visualize_surface(dir_name, u_triangle_mesh, v_triangle_mesh,
+                  F_true.reshape(501, 501), F_mlp, 'f_mlp_surface_refined')

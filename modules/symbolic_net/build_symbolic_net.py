@@ -65,12 +65,10 @@ class symbolic_net(nn.Module):
         random_vals = torch.rand(self.num_params).to(device)
 
         self.params = nn.Parameter(self.param_min + (self.param_max - self.param_min) * random_vals).to(device)
-        self.individual = individual(self.params, self.poly_terms, 
-                                     self.hill_terms)
+        self.individual = individual(self.params, self.species, self.degree)
         
     def forward(self, input):
-        self.individual = individual(self.params, self.poly_terms, 
-                                self.hill_terms)
+        self.individual = individual(self.params, self.species, self.degree)
 
         output = self.individual.predict_f(input)
         return output

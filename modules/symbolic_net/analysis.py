@@ -12,6 +12,7 @@ from modules.loaders.format_data import format_data
 from modules.generate_data.simulate_system import reaction
 from modules.symbolic_net.write_terms import write_terms
 from modules.symbolic_net.visualize_surface import visualize_surface
+from modules.symbolic_net.individual import individual
 
 config = {}
 exec(Path(f'{sys.argv[1]}/config.cfg').read_text(encoding="utf8"), {}, config)
@@ -21,23 +22,21 @@ species = int(config['species'])
 degree = int(config['degree'])
 nonzero_term_reg = int(config['nonzero_term_reg'])
 l1_reg = float(config['l1_reg'])
-coef_bounds = float(config['coef_bounds'])
+param_bounds = float(config['param_bounds'])
 density_weight = float(config['density_weight'])
 learning_rate = float(config['learning_rate'])
 
 dir_name = sys.argv[1]
 
 # Set training hyperparameters
-epochs = int(5000)
-rel_save_thresh = 0.05
-device = 'cuda'
+device = 'cpu'
 
 # Generate training data
 xt, u, v, shape_u, shape_v = format_data(training_data_path, plot=False)
 u_triangle_mesh, v_triangle_mesh = lltriangle(u, v)
 u, v = np.ravel(u_triangle_mesh), np.ravel(v_triangle_mesh)
 
-a, b ,k = 1, 1, 0.01
+a, b, k = 1, 1, 0.01
 F_true = reaction(u, v, a, b, k)
 
 training_data_nans = np.stack((u, v, F_true), axis=1)
@@ -46,58 +45,56 @@ training_data_nans = np.stack((u, v, F_true), axis=1)
 mask = ~np.isnan(training_data_nans).any(axis=1)
 training_data = training_data_nans[mask]
 
-# Split training data
-x_train, y_train, x_val, y_val = training_test_split(training_data, 1, device)
-
 # initialize model and compile
-sym_net = symbolic_net(species, degree, coef_bounds, device, l1_reg,
+sym_net = symbolic_net(species, degree, param_bounds, device, l1_reg,
                        nonzero_term_reg)
 sym_net.to(device)
 
-# initialize optimizer
-parameters = sym_net.parameters()
-opt = torch.optim.Adam(parameters, lr=learning_rate)
+### ANALYSIS
 
-model = model_wrapper(
-    model=sym_net,
-    optimizer=opt,
-    loss=sym_net.loss,
-    augmentation=None,
-    save_name=f'{dir_name}/binn')
+individuals = []
 
-# generate histogram for trainind data density if specified in config file
-hist = None
-edges = None
+# Calculate AIC and BIC for all learned equations
+parent_dir = '/'.join(dir_name.rstrip('/').split('/')[:-1])
+print(dir_name, parent_dir)
 
-if density_weight != 0:
-    u = y_train[:, 0].flatten()
-    v = y_train[:, 1].flatten()
+child_dirs = [d for d in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, d)) and 'binn_best_val_model' in os.listdir(os.path.join(parent_dir, d))]
+print(child_dirs)
 
-    hist_uncorrected = torchist.normalize(torchist.histogramdd(y_train, bins=10, 
-                                low=[min(u).item(), min(v).item()], 
-                                upp=[max(u).item(), max(v).item()]))[0]
+for child_dir in child_dirs:
+    
+    dir_path = f'{parent_dir}/{child_dir}'
 
-    # change zero values in histogram so reciprocal density is not inf
-    hist = torch.where(hist_uncorrected == 0, 0.001, hist_uncorrected)
+    # load model    
+    weights = torch.load(f"{dir_path}/binn_best_val_model", map_location=device)
+    sym_net.load_state_dict(weights)
 
-    edges = torchist.histogramdd_edges(y_train, bins=10, 
-                                    low=[min(u).item(), min(v).item()], 
-                                    upp=[max(u).item(), max(v).item()])
-    edges[0] = edges[0].to(device)
-    edges[1] = edges[1].to(device)
+    ind = individual(sym_net.params, species, degree)
+    
+    ind.fix_insignificant_terms(torch.tensor(training_data))
+    ind.fix_cheating_hill_functions(torch.tensor(training_data))
+         
+    true_vals = torch.from_numpy(training_data[:, -1])
+    predicted_vals = ind.predict_f(torch.from_numpy(training_data[:, :-1]))
+    
+    aic, bic = ind.abic(true_vals, predicted_vals)
+    
+    individuals.append((child_dir, ind.params, aic, bic))
 
-# Load model for analaysis
-model.load(f"{dir_name}/binn_best_val_model", device=device)
+# Rank learned equations from least (best) to greatest (worst) AIC
+individuals_sorted = sorted(individuals, key=lambda x: x[2])
 
-# Write terms
-fn = f'{dir_name}/equation.txt'
+# Write equations to file
+fn = f'{parent_dir}/equations_ranked.txt'
 file = open(fn, 'w')
-terms = write_terms(model.model.individual)
 
-for term in terms:
-    file.write(f'{term}\n')
-
-file.close()
-
-# Generate surface
-visualize_surface(model, dir_name, training_data_path)
+for i in range(len(individuals_sorted)):
+    # load model   
+    ind = individual(individuals_sorted[i][1], species, degree)
+    file.write(f'Directory: {individuals_sorted[i][0]}\n')
+    file.write(f'AIC: {individuals_sorted[i][2]}\n')
+    
+    terms = ind.write_terms()
+    for term in terms:
+        file.write(f'{term}\n')
+    file.write('\n')

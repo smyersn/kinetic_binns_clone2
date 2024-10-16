@@ -7,25 +7,9 @@ from modules.utils.imports import *
 from modules.utils.numpy_torch_conversion import *
 from modules.generate_data.simulate_system import reaction
 from modules.loaders.format_data import format_data_general
-
-def visualize_surface(model, model_dir, training_data_path):
     
-    # Generate training data
-    training_data = format_data_general(2, 2, training_data_path)
-    all_u, all_v = training_data[:, -2], training_data[:, -1], 
-    u_triangle_mesh, v_triangle_mesh = lltriangle(all_u, all_v)
-    u, v = np.ravel(u_triangle_mesh), np.ravel(v_triangle_mesh)
-
-    # Calculate true reaction surface
-    a, b, k = 1, 1, 0.01
-    F_true_stacked = reaction(u, v, a, b, k)
-    F_true = np.reshape(F_true_stacked, (501, 501))
-
-    # Calculate MLP reaction surface
-    F_mlp_stacked = to_numpy(model.model.individual.predict_f(to_torch(np.column_stack((u, v)))))
-    F_mlp = np.reshape(F_mlp_stacked, (501, 501))
-
-    # Plot
+def visualize_surface(model_dir, u_triangle_mesh, v_triangle_mesh, F_true,
+                      F_mlp, filename=None):
     fig = make_subplots(rows=1, cols=2,
                         specs=[[{'type':'scene'}, {'type':'scene'}]],
                         subplot_titles=('F(u, v)', 'F*(u, v)'),
@@ -102,4 +86,8 @@ def visualize_surface(model, model_dir, training_data_path):
     fig.update_coloraxes(showscale=False)
 
     fig.show()
-    fig.write_image(f'{model_dir}/f_mlp_surface.png')
+    
+    if filename is not None:
+        fig.write_image(f'{model_dir}/{filename}.png')
+    else:
+        fig.write_image(f'{model_dir}/f_mlp_surface.png')
