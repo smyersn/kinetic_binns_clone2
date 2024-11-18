@@ -223,7 +223,7 @@ class model_wrapper():
                     y_pred = self.model(x_true)
                                         
                     # compute loss and optional regularization
-                    self.train_loss += self.loss(y_pred, y_true)
+                    self.train_loss += self.loss(x_true, y_pred, y_true)
 
                     if self.regularizer is not None:
                         self.train_reg_loss += self.regularizer(self.model, 
@@ -353,7 +353,7 @@ class model_wrapper():
                     y_pred = self.model(x_true)
                     
                     # comptue loss
-                    self.val_loss += self.loss(y_pred, y_true)
+                    self.val_loss += self.loss(x_true, y_pred, y_true)
                     
                     if ewc is not None:
                         penalty = ewc.penalty(self.model)

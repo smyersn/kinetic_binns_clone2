@@ -5,23 +5,19 @@ sys.path.append(f'{file_dir}/../../')
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+
+from modules.loaders.visualize_training_data import plot_animation
 from modules.utils.numpy_torch_conversion import *
-from scipy.signal import convolve2d
 
 # Define 2-dimensional Laplacian
-def laplace_1d(M, dx):
-    grid = (-2 * M + np.roll(M, 1) + np.roll(M, -1)) / dx**2
-    return grid
-
-def laplace_2d(M, dx):
-    grid = (-4 * M + np.roll(M, 1, axis=0) + np.roll(M, -1, axis=0) +
-    np.roll(M, 1, axis=1) + np.roll(M, -1, axis=1)) / dx**2
+def laplace(M, dx, dim):
+    if dim == 1:
+        grid = (-2 * M + np.roll(M, 1) + np.roll(M, -1)) / dx**2
     
-    # kernel = np.array([[0, 1, 0],
-    #                   [1, -4, 1],
-    #                   [0, 1, 0]])
+    elif dim == 2:
+            grid = (-4 * M + np.roll(M, 1, axis=0) + np.roll(M, -1, axis=0) + 
+                    np.roll(M, 1, axis=1) + np.roll(M, -1, axis=1)) / dx**2
 
-    # grid = convolve2d(M, kernel, mode='same', boundary='wrap')
     return grid
 
 def calc_squared_wavenumbers(L, N, Du, Dv):
@@ -39,37 +35,46 @@ def calc_squared_wavenumbers(L, N, Du, Dv):
     return ksqu, ksqv
 
 # Define reaction
-def reaction(u, v, a, b, k):
-    F = (a * u**2 * v) / (1 + k * u**2) - b * u
+def wave_pinning_reaction(u, v, params):
+    a, b, k = params
     
+    F = (a * u**2 * v) / (1 + k * u**2) - b * u
+    return F
+
+def alex_reaction(u, v, params):
+    a, b = params
+    
+    F = a * u**2 * v - b * u
     return F
 
 # Define update functions for simulation
-def update_1d(u0, v0, a, b, k, Du, Dv, dt, dx, points, nn=None,
+def update_laplace(reaction_fn, u0, v0, params, Du, Dv, dt, dx, points, dim, nn=None,
               diffusion=False):
-    if nn == None:
-        F = reaction(u0, v0, a, b, k)
-    else:
+    if nn:
         F = to_numpy(nn.reaction(to_torch(
             np.column_stack((u0, v0)))[:, None]))
-        F = np.reshape(F, (points,))
+        F = np.reshape(F, (points,)*dim)
+    else:
+        F = reaction_fn(u0, v0, params)
 
-    Lu = laplace_1d(u0, dx)
-    Lv = laplace_1d(v0, dx)
+
+    Lu = laplace(u0, dx, dim)
+    Lv = laplace(v0, dx, dim)
     
     u1 = u0 + (Du * Lu + F) * dt
     v1 = v0 + (Dv * Lv - F) * dt
     
     return u1, v1
 
-def update_2d(u0, v0, a, b, k, Du, Dv, dt, ksqu, ksqv, points, nn=None,
+def update_fourier(reaction_fn, u0, v0, params, Du, Dv, dt, ksqu, ksqv, points, nn=None,
               diffusion=False):
-    if nn == None:
-        F = reaction(u0, v0, a, b, k)
-    else:
+    if nn:
         F = to_numpy(nn.reaction(to_torch(
             np.column_stack((u0.ravel(), v0.ravel())))[:, None]))
         F = np.reshape(F, (points,)*2)
+
+    else:
+        F = reaction_fn(u0, v0, params)
         
     u1r = u0 + F * dt
     v1r = v0 - F * dt
@@ -81,24 +86,6 @@ def update_2d(u0, v0, a, b, k, Du, Dv, dt, ksqu, ksqv, points, nn=None,
     v1 = np.real(np.fft.ifft2(v1r_hat / (1 - dt * ksqv)))
     
     return u1, v1  
-
-def update_2d_laplace(u0, v0, a, b, k, Du, Dv, dt, dx, points, nn=None,
-              diffusion=None):
-    if nn == None:
-        F = reaction(u0, v0, a, b, k)
-    else:
-        F = to_numpy(nn.reaction(to_torch(
-            np.column_stack((u0.ravel(), v0.ravel())))[:, None]))
-        F = np.reshape(F, (points,)*2)
-                
-    Lu = laplace_2d(u0, dx)
-    Lv = laplace_2d(v0, dx)
-    
-    u1 = u0 + (Du * Lu + F) * dt
-    v1 = v0 + (Dv * Lv - F) * dt
-    
-    return u1, v1
-
 
 def generate_initial_conditions(u0, v0, N, dim, spikes=0, custom=False, 
                                 random=False):
@@ -132,8 +119,8 @@ def generate_initial_conditions(u0, v0, N, dim, spikes=0, custom=False,
 
     return u, v
     
-def simulate(u, v, L, N, T, dim, species, a=1, b=1, k=0.01, Du=0.01, Dv=1, 
-             nn=None, diffusion=False, npz_path=None, early_stop=True):
+def simulate(u0, v0, L, N, T, dim, params, reaction_fn, Du=0.01, Dv=1, nn=None, 
+             diffusion=False, npz_path=None, early_stop=True):
     
     if diffusion == True:
         D = nn.diffusion_fitter()
@@ -163,6 +150,9 @@ def simulate(u, v, L, N, T, dim, species, a=1, b=1, k=0.01, Du=0.01, Dv=1,
     v_array = np.zeros(((rows,) + (N,)*dim))
     t_array = np.zeros(rows)
     
+    # Set initial conditions
+    u, v = u0, v0
+    
     # Solve
     for t in range(nits):
         if t % (nits // 10) == 0:
@@ -177,12 +167,8 @@ def simulate(u, v, L, N, T, dim, species, a=1, b=1, k=0.01, Du=0.01, Dv=1,
                     print(f'Steady state at t = {t * dt}', flush=True)
                     break
         
-        if dim == 1:    
-            u, v = update_1d(u, v, a, b, k, Du, Dv, dt, dx, N, nn, diffusion)
-        else:
-            # u, v = update_2d(u, v, a, b, k, Du, Dv, dt, ksqu, ksqv, N, nn, 
-            # diffusion)
-            u, v = update_2d_laplace(u, v, a, b, k, Du, Dv, dt, dx, N, nn, diffusion)
+        u, v = update_laplace(reaction_fn, u, v, params, Du, Dv, dt, dx, N, dim, nn, diffusion)
+
     # Remove zeros from arrays due to reaching steady state
     u_array = u_array[~np.all(u_array == 0, axis=1)]
     v_array = v_array[~np.all(v_array == 0, axis=1)]
@@ -192,3 +178,14 @@ def simulate(u, v, L, N, T, dim, species, a=1, b=1, k=0.01, Du=0.01, Dv=1,
         np.savez(npz_path, x_array, u_array, v_array, t_array)
     else:
         return x_array, u_array, v_array, t_array
+    
+if __name__ == '__main__':
+    species_totals = [1, 1.0246]
+    species_totals_high_u = [4, 1]
+    species_totals_high_v = [1, 4]
+    species_totals_high_equal = [4, 4.0246]
+    params = [1, 1, 0.01]
+    
+    x, u, v, t = simulate(species_totals_high_equal, params, 100, 500, 10, random=True)
+    np.savez('../../data/high_equal_random_data', x_random, u_random, v_random, t_random)
+    plot_animation(x, u, v, t, save = True, name = 'high_equal_random')

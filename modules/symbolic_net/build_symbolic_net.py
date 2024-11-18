@@ -4,6 +4,7 @@ import torchist
 
 from modules.binn.build_mlp import build_mlp
 from modules.utils.gradient import gradient
+from modules.utils.histogram import calc_density
 from modules.activations.softplus_relu import softplus_relu
 from modules.utils.numpy_torch_conversion import to_torch
 from modules.symbolic_net.individual import individual
@@ -31,7 +32,8 @@ class symbolic_net(nn.Module):
         F (torch tensor): predicted reaction values with shape (N, 1)
     '''
     
-    def __init__(self, species, degree, param_bounds, device, l1_reg=0, nonzero_term_reg=0):
+    def __init__(self, species, degree, param_bounds, device, l1_reg=0, 
+                 nonzero_term_reg=0, density_weight=0, hist=None, edges=None):
         super().__init__()
         self.F_min = -100
         self.F_max = 100
@@ -47,6 +49,10 @@ class symbolic_net(nn.Module):
         self.poly_terms = calculate_poly_terms(species, degree)
         self.hill_terms = calculate_hill_terms(species, degree)
         self.num_params = len(self.poly_terms) + 3 * 2 * len(self.hill_terms) 
+        
+        self.hist = hist
+        self.edges = edges
+        self.density_weight = density_weight
         
         # K and n in Hill functions shouldn't be negative
         self.param_min = torch.cat((torch.full((len(self.poly_terms),), -param_bounds),
@@ -68,19 +74,22 @@ class symbolic_net(nn.Module):
         self.individual = individual(self.params, self.species, self.degree)
         
     def forward(self, input):
-        self.individual = individual(self.params, self.species, self.degree)
+        self.individual = individual(self.params, self.species, self.degree,
+                                     self.hist, self.edges)
 
         output = self.individual.predict_f(input)
+
         return output
     
-    def loss(self, pred, true):
+    def loss(self, x_true, pred, true):
         self.MSE_loss = 0
         self.F_loss = 0
         self.param_loss = 0
         self.l1reg_loss = 0
         
         # MSE loss
-        self.MSE_loss += nn.functional.mse_loss(pred, true.view(-1))
+        # self.MSE_loss += nn.functional.mse_loss(pred, true.view(-1))
+        self.squared_error = (pred - true.view(-1))**2
         
         # F loss and param loss
         
@@ -90,14 +99,15 @@ class symbolic_net(nn.Module):
         self.param_loss += self.param_weight * torch.relu(self.param_min - self.params)**2
         self.param_loss += self.param_weight * torch.relu(self.params - self.param_max)**2
         
-                
         # L1 Regularization
         if self.l1_reg != 0:
             l1_norm = custom_norm(self.params, 0.01)
             self.l1reg_loss += self.l1_reg * l1_norm
                                 
-        total_loss = (self.MSE_loss + self.l1reg_loss + torch.mean(self.F_loss) + torch.mean(self.param_loss))
-        # print(self.MSE_loss, self.l1reg_loss, torch.mean(self.F_loss), torch.mean(self.param_loss), total_loss)
+        if self.density_weight != 0:
+            density = calc_density(x_true, self.hist, self.edges)
+            self.squared_error *= (density * self.density_weight)
+            
+        total_loss = (torch.mean(self.squared_error) + self.l1reg_loss + torch.mean(self.F_loss) + torch.mean(self.param_loss))
 
         return total_loss
-    

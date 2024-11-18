@@ -4,8 +4,12 @@ repo_start = f'{file_dir}/../../'
 sys.path.append(repo_start)
 
 from modules.utils.imports import *
+from modules.utils.histogram import calc_density
 from modules.genetic_algorithm.custom_deap_functions import (
     calculate_poly_terms, calculate_hill_terms)
+
+np.set_printoptions(threshold=sys.maxsize)
+torch.set_printoptions(threshold=sys.maxsize)
 
 class individual():   
     def __init__(self, params, species, degree):
@@ -87,19 +91,18 @@ class individual():
             else:
                 dec_hill_pred[:, i] = param * ((uv[:, term[0]] * (1 - (uv[:, term[1]]**n) / (1 + k * uv[:, term[1]]**n))))
 
-
         term_fs = torch.cat((poly_pred, inc_hill_pred, dec_hill_pred), dim=1)
-        
+
         if terms == True:
             return term_fs
         
         else:
             return torch.sum(term_fs, dim=1)
         
-    def fix_insignificant_terms(self, training_data):
+    def fix_insignificant_terms(self, uv):
         # removes all terms from individual that have minor impact on total
         # surface shape and magnitude
-        term_surfaces = self.predict_f(training_data.clone().detach(), terms=True)
+        term_surfaces = self.predict_f(uv.clone().detach(), terms=True)
 
         for i in range(len(self.coeffs)):
             term_surface = term_surfaces[:, i]
@@ -115,7 +118,7 @@ class individual():
         
         self.update_attributes(torch.cat((self.coeffs, self.hill_ks, self.hill_ns)))
     
-    def fix_cheating_hill_functions(self, training_data):
+    def fix_cheating_hill_functions(self, uv):
         # Symbolic net sometimes "cheats," approximating polynomial terms with
         # Hill functions. This method corrects for this mistake.
         
@@ -126,7 +129,7 @@ class individual():
                 # define parameters
                 k = self.hill_ks_increasing[i]
                 n = self.hill_ns_increasing[i]
-                specie = training_data[:, term[-1]]
+                specie = uv[:, term[-1]]
                 
                 # check if denominator is roughly 1 for all u and v (sign of cheating)
                 denom_vals = 1 + k * specie**n
@@ -155,11 +158,20 @@ class individual():
                         
         self.update_attributes(torch.cat((coeffs, self.hill_ks, self.hill_ns)))  
         
-    def abic(self, true_vals, predicted_vals):   
+    def abic(self, uv, true_vals, predicted_vals, density_weight=0, hist=None,
+             edges=None):   
+        
         # Calculate the residual sum of squares (RSS)   
         residuals = true_vals - predicted_vals
+        
+        if density_weight != 0:
+            density = calc_density(uv, hist, edges)
+            print(density_weight)
+            print(torch.cat((uv, density.unsqueeze(-1)), dim=1)[:1000, :])
+            residuals *= (density * density_weight)
+        
         rss = torch.sum(residuals ** 2)
-
+        
         # Number of data points
         n = len(predicted_vals)
 
